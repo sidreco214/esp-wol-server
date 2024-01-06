@@ -1,0 +1,8 @@
+.vscode
+build
+build-debug
+build-release
+sdkconfig
+sdkconfig.old
+main/certs/
+nvs
