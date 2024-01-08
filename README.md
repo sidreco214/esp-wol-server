@@ -1,19 +1,19 @@
 # ESP WOL Server
 WOL HTTPS Server on ESP32
 
-* binary size is 0x11bdd0 bytes
-* When Wifi is connected, Built-in led(GIPO_NUM_2) turn on.
-* When Server sends magic packet, Built-in led(GIPO_NUM_2) blink three times.
+* When Wifi is connected, built-in LED (GIPO_NUM_2) turn on.
+* When the server sends magic packet, built-in LED blink three times.
+* Multiple registering of user is supported.
 
 ## Menuconfig
-* Compiler Option -> Enable C++ Exception
-* Compiler Option -> Optimization Level (Optimize for performance (-O2))
+* Compiler Option -> Optimization Level (Optimize for performance (-O2)) #Release build
 * Component Config -> HTTP Server -> Max HTTP Request Header Length 1024
 * Component Config -> ESP HTTPS Server -> Enable ESP_HTTPS_SERVER 
 * Component Config -> ESP System Setting -> CPU frequency(240 MHz)
-* Partition Table -> Partition Table (Single factory app (Large, no OTA))
+* Partition Table -> Partition Table (Custom partition table CSV)
 
 ## Build & and upload
+### Using idf.py
 ```console
 git clone https://github.com/sidreco214/esp-wol-server
 cd esp-wol-server
@@ -22,13 +22,25 @@ idf.py menuconfig
 idf.py build
 idf.py -p <Port> flash monitor
 ```
-When flash ESP32 push Boot button on ESP32
+If you want to debug build, enter this command instead of idf.py set-target esp32
+```cmake -G Ninja -B build -D IDF_TARGET=esp32 -D CMAKE_BUILD_TYPE=DEBUG```
+
+### Using cmake
+```console
+git clone https://github.com/sidreco214/esp-wol-server
+cd esp-wol-server
+cmake -G Ninja -B build-release -D IDF_TARGET=esp32 -D SDKCONFIG=sdkconfig.release -D CMAKE_BUILD_TYPE=Release
+cd build-release
+ninja menuconfig
+ninja all
+python -m esptool -p <Port> --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/esp-wol-server.bin 0x187000 build/storage.bin
+```
 
 ## Configuration
 ### SSL Certification
 #### Open SSL
 ```console
-openssl req -newkey rsa:2048 -nodes -keyout main/certs/prvtkey.pem -x509 -days 3650 -out main/certs/servercert.pem -subj "/C=KR/CN=ESP32 WOL Server"
+openssl req -newkey rsa:2048 -nodes -keyout certs/prvtkey.pem -x509 -days 3650 -out certs/servercert.pem -subj "/C=KR/CN=ESP32 WOL Server"
 ```
 other subjs configuration
 * CN      Common Name
@@ -40,6 +52,13 @@ other subjs configuration
 * STREET  Street Address
 * DC      Domain Component
 * UID     Userid
+
+#### Update SSL Certification
+```console
+python ~/esp/esp-idf/components/spiffs/spiffsgen.py 0x5000 certs certs.bin
+python ~/esp/esp-idf/components/partition_table/parttool.py -p /dev/ttyUSB0 write_partition --partition-name=storage --input certs.bin
+```
+or regenerate openssl and reflash it.
 
 ### Wifi and User Data
 #### Method 1 - Serial Monitor
@@ -62,20 +81,29 @@ Example
 ```
 
 #### Method 2 - nvs_partition_generator
+```console
+touch nvs-partition.csv #linux or git bash
+echo . > nvs-partition.csv #window
+```
+
 nvs-partition.csv
 ```console
 key,type,encoding,value
 Storage,namespace,,
 WIFI_SSID,data,string,YOUR_WIFI SSID
-WIFI_PW,data,string,YOUR_WIFI_PASSWORD 
+WIFI_PW,data,string,YOUR_WIFI_PASSWORD
 BROADCAST_IP,data,string,YOUR_BRAOADCAST_IP
 USERNAME,namespace,,
 pw,data,string,YOUR_PASSWORD
 mac,data,i64,YOUR_MAC_DATA
+USERNAME2,namespace,,
+pw,data,string,YOUR_PASSWORD2
+mac,data,i64,YOUR_MAC_DATA2
+...
 ```
 
 ```console
-python ~/esp/esp-idf/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py generate nvs-partition.csv nvs-partition.bin 0x4000
+python ~/esp/esp-idf/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py generate nvs-partition.csv nvs-partition.bin 0x6000
 python ~/esp/esp-idf/components/partition_table/parttool.py -p /dev/ttyUSB0 write_partition --partition-name=nvs --input nvs-partition.bin
 ```
 
@@ -86,6 +114,7 @@ If your MAC Address: 72-47-28-d7-a1-e8, MAC data is 255781797119858(0xe8a1d72847
 1. Reverse the order of Mac Address. -> e8-a1-d7-28-42-72
 2. Delete hypon(-) or colon(:) and add '0x' in front of them. ->   0xe8a1d7284272
 3. Convert decimal to binary number. -> 255781797119858
+Windows stadard caculator in programmer mode is helpful
 
 ## Serial Commands
 ```console

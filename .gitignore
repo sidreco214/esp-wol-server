@@ -1,8 +1,12 @@
 .vscode
 build
-build-debug
 build-release
 sdkconfig
 sdkconfig.old
-main/certs/
-nvs
+sdkconfig.release
+sdkconfig.release.old
+certs/
+certs.bin
+nvs-partition.csv
+nvs-partition.bin
+scp_bin.sh

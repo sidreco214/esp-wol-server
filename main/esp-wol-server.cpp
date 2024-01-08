@@ -5,10 +5,13 @@
 
 #include <string>
 #include <sstream>
-#include <mutex>
-#include <shared_mutex>
 #include <vector>
 #include <map>
+#include <algorithm>
+
+#include <thread>
+#include <mutex>
+#include <shared_mutex>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -47,6 +50,9 @@
 #define HTTPD_POST_BUF_SIZE 100
 
 #define NVS_STROAGENAME "Storage"
+
+#include "esp_spiffs.h"
+#include "spiffs.h"
 
 /*
 struct of nvs
@@ -87,7 +93,7 @@ void blink_builtin_led_task(void* pvParamter) {
     vTaskDelete(NULL);
 }
 
-static httpd_handle_t start_web_server();
+static httpd_handle_t start_web_server(const char* prvtkey, size_t prvtkey_size, const char* servercert, size_t servercert_size);
 inline esp_err_t stop_webserver(httpd_handle_t* httpd_handle) {
     return httpd_ssl_stop(*httpd_handle);
 }
@@ -191,15 +197,66 @@ extern "C" void app_main(void) {
 
     httpd_handle_t server = NULL; //wol https server handle
     while(true) {
-        if(wifi_is_available()) {
-            gpio_set_level(LED_BUILTIN, 1);
-            if(server == NULL) server = start_web_server();
-        }
-        else {
+        serial_command_task(std::ref(nvs), std::ref(nvs_mutex));
+        if(!wifi_is_available()) {
             gpio_set_level(LED_BUILTIN, 0);
             if(server) stop_webserver(&server);
         }
-        serial_command_task(std::ref(nvs), std::ref(nvs_mutex));
+
+        //wifi is connected
+        gpio_set_level(LED_BUILTIN, 1);
+        if(server != NULL) continue;
+
+        /*
+        starting server
+        */
+
+        esp_vfs_spiffs_conf_t spiffs_config = {
+            .base_path = "/spiffs",
+            .partition_label = NULL,
+            .max_files = 5,
+            .format_if_mount_failed = false
+        };
+        esp_err_t err = spiffs_init(&spiffs_config);
+        if(err != ESP_OK) {
+            ESP_LOGE(ESP_HTTPS_SERVER_TAG, "Error to spiffs init (%s)", esp_err_to_name(err));
+            continue;
+        }
+        
+        //read prvtkey
+        size_t prvtkey_size = get_spiffs_file_size("/spiffs/prvtkey.pem");
+        char* prvtkey = (char*)malloc(prvtkey_size);
+        if(prvtkey == NULL) {
+            ESP_LOGE("SPIFFS_TAG", "maclloc failed");
+            continue;
+        }
+        if(read_spiffs("/spiffs/prvtkey.pem", prvtkey, prvtkey_size) <= 0) {
+            ESP_LOGE("SPIFFS_TAG", "Error read prvtkey");
+            free(prvtkey);
+            continue;
+        };
+
+        //read servercert
+        size_t servercert_size = get_spiffs_file_size("/spiffs/servercert.pem");
+        char* servercert = (char*)malloc(servercert_size);
+        if(servercert == NULL) {
+            ESP_LOGE("SPIFFS_TAG", "maclloc failed");
+            free(prvtkey);
+            continue;
+        }
+        if(read_spiffs("/spiffs/servercert.pem", servercert, servercert_size) <= 0) {
+            ESP_LOGE("SPIFFS_TAG", "Error read servercert");
+            free(prvtkey);
+            free(servercert);
+            continue;
+        };
+
+        esp_vfs_spiffs_unregister(spiffs_config.partition_label);
+        ESP_LOGI(SPIFFS_TAG, "SPIFFS unmount"); 
+
+        server = start_web_server(prvtkey, prvtkey_size, servercert, servercert_size);
+        free(prvtkey);
+        free(servercert);
     }
 }
 
@@ -345,6 +402,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
             case HTTPD_BASIC_AUTH_FAIL:
                 ESP_LOGE(ESP_HTTPS_SERVER_TAG, "Fail to basic auth");
                 httpd_resp_send_500(req);
+                user_nvs.close();
                 return ESP_FAIL;
                 break;
         
@@ -352,6 +410,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
                 ESP_LOGE(ESP_HTTPS_SERVER_TAG, "Can't find Authorization Header");
                 httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=wol");
                 httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Can't find Authorization Header");
+                user_nvs.close();
                 return ESP_OK;
                 break;
         
@@ -359,6 +418,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
                 ESP_LOGE(ESP_HTTPS_SERVER_TAG, "Can't find Authorization Value");
                 httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=wol");
                 httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Can't find Authorization Value");
+                user_nvs.close();
                 return ESP_OK;
                 break;
         
@@ -372,6 +432,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
             case HTTPD_BASIC_AUTH_SUCCESS:
                 ESP_LOGI(ESP_HTTPS_SERVER_TAG, "Authentication success");
                 user_nvs.read("mac", &mac.data);
+                user_nvs.close();
                 break;
         }
     }
@@ -407,21 +468,25 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
     return ESP_OK;
 };
 
-static httpd_handle_t start_web_server() {
+static httpd_handle_t start_web_server(const char* prvtkey, size_t prvtkey_size, const char* servercert, size_t servercert_size) {
     httpd_handle_t httpd_handle;
     ESP_LOGI(ESP_HTTPS_SERVER_TAG, "Starting Server");
 
     //ssl config
     httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
-    extern const unsigned char servercert_start[] asm("_binary_servercert_pem_start");
-    extern const unsigned char servercert_end[] asm("_binary_servercert_pem_end");
-    ssl_config.servercert = servercert_start;
-    ssl_config.servercert_len = servercert_end - servercert_start;
+    //extern const unsigned char servercert_start[] asm("_binary_servercert_pem_start");
+    //extern const unsigned char servercert_end[] asm("_binary_servercert_pem_end");
+    //ssl_config.servercert = servercert_start;
+    //ssl_config.servercert_len = servercert_end - servercert_start;
+    ssl_config.servercert = (const uint8_t*)servercert;
+    ssl_config.servercert_len = servercert_size;
 
-    extern const unsigned char prvtkey_pem_start[] asm("_binary_prvtkey_pem_start");
-    extern const unsigned char prvtkey_pem_end[] asm("_binary_prvtkey_pem_end");
-    ssl_config.prvtkey_pem = prvtkey_pem_start;
-    ssl_config.prvtkey_len = prvtkey_pem_end - prvtkey_pem_start;
+    //extern const unsigned char prvtkey_pem_start[] asm("_binary_prvtkey_pem_start");
+    //extern const unsigned char prvtkey_pem_end[] asm("_binary_prvtkey_pem_end");
+    //ssl_config.prvtkey_pem = prvtkey_pem_start;
+    //ssl_config.prvtkey_len = prvtkey_pem_end - prvtkey_pem_start;
+    ssl_config.prvtkey_pem = (const uint8_t*)prvtkey;
+    ssl_config.prvtkey_len = prvtkey_size;
 
     esp_err_t err = httpd_ssl_start(&httpd_handle, &ssl_config);
     if(err != ESP_OK) {
@@ -442,6 +507,7 @@ static httpd_handle_t start_web_server() {
     wol_post_uri.handler = wol_post_uri_handler;
     ESP_ERROR_CHECK(httpd_register_uri_handler(httpd_handle, &wol_post_uri));
     ESP_LOGI(ESP_HTTPS_SERVER_TAG, "Server configuration done");
+
     return httpd_handle;
 };
 
@@ -591,7 +657,7 @@ void serial_command_task(ESP_NVS& nvs, std::shared_mutex& nvs_mutex) {
                         mac.addr[4],
                         mac.addr[5]
                         );
-                        user_nvs.close();
+                    user_nvs.close();
                 }
                 break;
     }
