@@ -1,4 +1,3 @@
-//#define DEBUG
 #include <stdio.h>
 #include <sys/param.h>
 #include <malloc.h>
@@ -169,6 +168,12 @@ extern "C" void app_main(void) {
     gpio_set_level(LED_BUILTIN, 0);
 
     uart0_init(SERIAL_BAUD);
+
+    #ifdef DEBUG
+    vTaskDelay(500 /portTICK_PERIOD_MS);
+    fflush(stdout);
+    printf("\n==================\nDebug Build\n==================\n");
+    #endif
 
     ESP_NVS nvs(NVS_STROAGENAME);
     nvs_mutex.lock_shared();

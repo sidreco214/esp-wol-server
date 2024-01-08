@@ -12,6 +12,8 @@ WOL HTTPS Server on ESP32
 * Component Config -> ESP System Setting -> CPU frequency(240 MHz)
 * Partition Table -> Partition Table (Custom partition table CSV)
 
+<span style="color:red">Waring: 'Optimization Level (Optimize for performance (-O2))' has problem of null pointer dereference when multiple wol request at once, but (-Og) doesn't.</span>
+
 ## Build & and upload
 ### Using idf.py
 ```console
