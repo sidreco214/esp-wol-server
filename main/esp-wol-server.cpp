@@ -80,18 +80,6 @@ Mutexs
 std::shared_mutex nvs_mutex; //nvs mutex
 std::mutex builtin_led_mutex;
 
-void blink_builtin_led_task(void* pvParamter) {
-    builtin_led_mutex.lock();
-    for(int i=0; i<3; ++i) {
-        gpio_set_level(LED_BUILTIN, 0);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        gpio_set_level(LED_BUILTIN, 1);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-    builtin_led_mutex.unlock();
-    vTaskDelete(NULL);
-}
-
 static httpd_handle_t start_web_server(const char* prvtkey, size_t prvtkey_size, const char* servercert, size_t servercert_size);
 inline esp_err_t stop_webserver(httpd_handle_t* httpd_handle) {
     return httpd_ssl_stop(*httpd_handle);
@@ -376,7 +364,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
 
     1.parsing
     2.authenication
-    3.create task sending magic packet
+    3.send magic packet
     */
     char name[30];
     strlcpy(name, (char*)(buf + 5), 30);
@@ -459,19 +447,35 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
         memcpy(packet, mac.addr, sizeof(mac.addr));
     
     //send magic packet
-    udp_client_send_task_param_t udp_task_param;
-    udp_task_param.dest_ip_addr = broadcast_ip;
-    udp_task_param.dest_port = WOL_PORT;
-    udp_task_param.addr_family = IP_ADDR_FAMILY;
-    udp_task_param.ip_protocol = IP_PROTOCOL;
-    udp_task_param.timeout_sec = UDP_SEND_TIMEOUT;
-    udp_task_param.message = magic_packet;
-    xTaskCreate(udp_client_send_task, "Send Magic Packet", 4096, &udp_task_param, 5, NULL);
-    xTaskCreate(blink_builtin_led_task, "blink built-in led", 1024, NULL, 5, NULL);
+    udp_client_send_param_t udp_send_param;
+    udp_send_param.dest_ip_addr = broadcast_ip;
+    udp_send_param.dest_port = WOL_PORT;
+    udp_send_param.addr_family = IP_ADDR_FAMILY;
+    udp_send_param.ip_protocol = IP_PROTOCOL;
+    udp_send_param.timeout_sec = UDP_SEND_TIMEOUT;
+    udp_send_param.message = magic_packet;
+    esp_err_t err = udp_client_send(&udp_send_param);
+
+    if(err != ESP_OK) {
+        //end response
+        httpd_resp_send_500(req);
+        ESP_LOGE(ESP_HTTPS_SERVER_TAG, "Failed to send magic packet");
+        return ESP_FAIL;
+    }
 
     //end response
     httpd_resp_send_chunk(req, "OK", HTTPD_RESP_USE_STRLEN);
     httpd_resp_send_chunk(req, NULL, 0);
+
+    //blink led
+    builtin_led_mutex.lock();
+    for(int i=0; i<3; ++i) {
+        gpio_set_level(LED_BUILTIN, 0);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        gpio_set_level(LED_BUILTIN, 0);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+    builtin_led_mutex.unlock();
     return ESP_OK;
 };
 
@@ -481,17 +485,9 @@ static httpd_handle_t start_web_server(const char* prvtkey, size_t prvtkey_size,
 
     //ssl config
     httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
-    //extern const unsigned char servercert_start[] asm("_binary_servercert_pem_start");
-    //extern const unsigned char servercert_end[] asm("_binary_servercert_pem_end");
-    //ssl_config.servercert = servercert_start;
-    //ssl_config.servercert_len = servercert_end - servercert_start;
     ssl_config.servercert = (const uint8_t*)servercert;
     ssl_config.servercert_len = servercert_size;
 
-    //extern const unsigned char prvtkey_pem_start[] asm("_binary_prvtkey_pem_start");
-    //extern const unsigned char prvtkey_pem_end[] asm("_binary_prvtkey_pem_end");
-    //ssl_config.prvtkey_pem = prvtkey_pem_start;
-    //ssl_config.prvtkey_len = prvtkey_pem_end - prvtkey_pem_start;
     ssl_config.prvtkey_pem = (const uint8_t*)prvtkey;
     ssl_config.prvtkey_len = prvtkey_size;
 

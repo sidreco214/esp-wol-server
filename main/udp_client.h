@@ -28,9 +28,9 @@ typedef struct {
     int ip_protocol;
     uint timeout_sec;
     char* message;
-} udp_client_send_task_param_t;
+} udp_client_send_param_t;
 
-void udp_client_send_task(void *pvParameters);
+esp_err_t udp_client_send(udp_client_send_param_t* param);
 
 #ifdef __cplusplus
 }

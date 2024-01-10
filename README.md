@@ -12,8 +12,6 @@ WOL HTTPS Server on ESP32
 * Component Config -> ESP System Setting -> CPU frequency(240 MHz)
 * Partition Table -> Partition Table (Custom partition table CSV)
 
-<span style="color:red">Waring: 'Optimization Level (Optimize for performance (-O2))' has problem of null pointer dereference when multiple wol request at once, but (-Og) doesn't.</span>
-
 ## Build & and upload
 ### Using idf.py
 ```console
@@ -24,7 +22,7 @@ idf.py menuconfig
 idf.py build
 idf.py -p <Port> flash monitor
 ```
-If you want to debug build, enter this command instead of idf.py set-target esp32
+If you want to debug build, enter this command instead of 'idf.py set-target esp32'
 ```cmake -G Ninja -B build -D IDF_TARGET=esp32 -D CMAKE_BUILD_TYPE=DEBUG```
 
 ### Using cmake
