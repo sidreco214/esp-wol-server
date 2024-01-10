@@ -431,6 +431,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
                 ESP_LOGI(ESP_HTTPS_SERVER_TAG, "Authentication informations aren't matched");
                 httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=wol");
                 httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Authentication informations aren't matched");
+                user_nvs.close();
                 return ESP_OK;
                 break;
         
@@ -469,6 +470,7 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
     xTaskCreate(blink_builtin_led_task, "blink built-in led", 1024, NULL, 5, NULL);
 
     //end response
+    httpd_resp_send_chunk(req, "OK", HTTPD_RESP_USE_STRLEN);
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 };
