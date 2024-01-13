@@ -29,7 +29,7 @@
 #include "esp_tls_crypto.h"
 
 #include "driver/gpio.h"
-#define LED_BUILTIN GPIO_NUM_2
+#define LED_BUILTIN (gpio_num_t)CONFIG_BLINK_GPIO //You can edit on idf.py mecuconfig ESP WOL Server configuration
 
 #include "util.h"
 
@@ -194,6 +194,7 @@ extern "C" void app_main(void) {
         if(!wifi_is_available()) {
             gpio_set_level(LED_BUILTIN, 0);
             if(server) stop_webserver(&server);
+            continue;
         }
 
         //wifi is connected
