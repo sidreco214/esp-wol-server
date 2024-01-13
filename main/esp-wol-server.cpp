@@ -31,6 +31,14 @@
 #include "driver/gpio.h"
 #define LED_BUILTIN (gpio_num_t)CONFIG_BLINK_GPIO //You can edit on idf.py mecuconfig ESP WOL Server configuration
 
+#if CONFIG_LED_ON_STATE_INVERSE
+#define LED_BUILTIN_ON 0
+#define LED_BUILTIN_OFF 1
+#else
+#define LED_BUILTIN_ON 1
+#define LED_BUILTIN_OFF 0
+#endif
+
 #include "util.h"
 
 #include "UsbSerial.h"
@@ -153,7 +161,7 @@ static auth_info_t check_authencation(httpd_req_t* req, const char* id, const ch
 
 extern "C" void app_main(void) {
     gpio_set_direction(LED_BUILTIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED_BUILTIN, 0);
+    gpio_set_level(LED_BUILTIN, LED_BUILTIN_OFF);
 
     uart0_init(SERIAL_BAUD);
 
@@ -192,13 +200,12 @@ extern "C" void app_main(void) {
     while(true) {
         serial_command_task(std::ref(nvs), std::ref(nvs_mutex));
         if(!wifi_is_available()) {
-            gpio_set_level(LED_BUILTIN, 0);
+            gpio_set_level(LED_BUILTIN, LED_BUILTIN_OFF);
             if(server) stop_webserver(&server);
             continue;
         }
-
         //wifi is connected
-        gpio_set_level(LED_BUILTIN, 1);
+        gpio_set_level(LED_BUILTIN, LED_BUILTIN_ON); 
         if(server != NULL) continue;
 
         /*
@@ -465,15 +472,15 @@ static esp_err_t wol_post_uri_handler(httpd_req_t* req) {
     }
 
     //end response
-    httpd_resp_send_chunk(req, "OK", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(req, "OK\n", HTTPD_RESP_USE_STRLEN);
     httpd_resp_send_chunk(req, NULL, 0);
 
     //blink led
     builtin_led_mutex.lock();
     for(int i=0; i<3; ++i) {
-        gpio_set_level(LED_BUILTIN, 0);
+        gpio_set_level(LED_BUILTIN, LED_BUILTIN_OFF);
         vTaskDelay(100 / portTICK_PERIOD_MS);
-        gpio_set_level(LED_BUILTIN, 0);
+        gpio_set_level(LED_BUILTIN, LED_BUILTIN_ON);
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     builtin_led_mutex.unlock();

@@ -11,35 +11,13 @@ WOL HTTPS Server on ESP32
 * Component Config -> ESP HTTPS Server -> Enable ESP_HTTPS_SERVER 
 * Component Config -> ESP System Setting -> CPU frequency(240 MHz)
 * Partition Table -> Partition Table (Custom partition table CSV)
-
-## Build & and upload
-### Using idf.py
-```console
-git clone https://github.com/sidreco214/esp-wol-server
-cd esp-wol-server
-idf.py set-target esp32
-idf.py menuconfig
-idf.py build
-idf.py -p <Port> flash monitor
-```
-If you want to debug build, enter this command instead of 'idf.py set-target esp32'
-```cmake -G Ninja -B build -D IDF_TARGET=esp32 -D CMAKE_BUILD_TYPE=DEBUG```
-
-### Using cmake
-```console
-git clone https://github.com/sidreco214/esp-wol-server
-cd esp-wol-server
-cmake -G Ninja -B build-release -D IDF_TARGET=esp32 -D SDKCONFIG=sdkconfig.release -D CMAKE_BUILD_TYPE=Release
-cd build-release
-ninja menuconfig
-ninja all
-python -m esptool -p <Port> --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/esp-wol-server.bin 0x187000 build/storage.bin
-```
+Like ESP32-C3 Super mini, some board may have inversed logic on built-in led. In this case, you should inverse the logic on ```ESP WOL Server configuration -> [*]LED On-State Inversion```
 
 ## Configuration
 ### SSL Certification
 #### Open SSL
 ```console
+mkdir certs
 openssl req -newkey rsa:2048 -nodes -keyout certs/prvtkey.pem -x509 -days 3650 -out certs/servercert.pem -subj "/C=KR/CN=ESP32 WOL Server"
 ```
 other subjs configuration
@@ -115,6 +93,37 @@ If your MAC Address: 72-47-28-d7-a1-e8, MAC data is 255781797119858(0xe8a1d72847
 2. Delete hypon(-) or colon(:) and add '0x' in front of them. ->   0xe8a1d7284272
 3. Convert decimal to binary number. -> 255781797119858
 Windows stadard caculator in programmer mode is helpful
+
+## Build & and upload
+Before build thig project, you must create SSL certification on ```certs/```
+### Using idf.py
+```console
+git clone https://github.com/sidreco214/esp-wol-server
+cd esp-wol-server
+idf.py set-target esp32
+idf.py menuconfig
+idf.py build
+idf.py -p <Port> flash monitor
+```
+If you want to debug build, enter this command instead of 'idf.py set-target esp32'
+```cmake -G Ninja -B build -D IDF_TARGET=esp32 -D CMAKE_BUILD_TYPE=DEBUG```
+
+### Using cmake
+```console
+git clone https://github.com/sidreco214/esp-wol-server
+cd esp-wol-server
+cmake -G Ninja -B build-release -D IDF_TARGET=esp32 -D SDKCONFIG=sdkconfig.release -D CMAKE_BUILD_TYPE=Release
+cd build-release
+ninja menuconfig
+ninja all
+python -m esptool -p <Port> --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/esp-wol-server.bin 0x187000 build/storage.bin
+```
+* Note esptool option are differ in esp model.
+
+ex esp32-c3
+```console
+python -m esptool --chip esp32c3 -b 460800 -p /dev/ttyACM0 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 80m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/esp-wol-server.bin 0x187000 build/storage.bin
+```
 
 ## Serial Commands
 ```console

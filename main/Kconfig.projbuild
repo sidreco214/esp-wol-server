@@ -5,12 +5,19 @@ menu "ESP WOL Server configuration"
     config BLINK_GPIO
         int "Blink GPIO number"
         range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
-        default 5 if IDF_TARGET_ESP32
+        default 2 if IDF_TARGET_ESP32
         default 18 if IDF_TARGET_ESP32S2
         default 48 if IDF_TARGET_ESP32S3
         default 8
         help
             GPIO number (IOxx) to blink on and off the LED.
             Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used to blink.
+    
+    config LED_ON_STATE_INVERSE
+        bool "LED On-State Inversion"
+        default 1
+        help 
+            Some board has inversed logic on built-in led.
+     
 
 endmenu
