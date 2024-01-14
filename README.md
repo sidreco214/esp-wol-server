@@ -99,7 +99,7 @@ Windows stadard caculator in programmer mode is helpful
 Before build thig project, you must create SSL certification on ```certs/```
 ### Using idf.py
 ```console
-git clone https://github.com/sidreco214/esp-wol-server
+git clone https://github.com/sidreco214/esp-wol-server.git
 cd esp-wol-server
 idf.py set-target esp32
 idf.py menuconfig
