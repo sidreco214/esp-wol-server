@@ -11,7 +11,8 @@ WOL HTTPS Server on ESP32
 * Component Config -> ESP HTTPS Server -> Enable ESP_HTTPS_SERVER 
 * Component Config -> ESP System Setting -> CPU frequency(240 MHz)
 * Partition Table -> Partition Table (Custom partition table CSV)
-Like ESP32-C3 Super mini, some board may have inversed logic on built-in led. In this case, you should inverse the logic on ```ESP WOL Server configuration -> [*]LED On-State Inversion```
+ 
+Note: Like ESP32-C3 Super mini, some board may have inversed logic on built-in led. In this case, you should inverse the logic on ```ESP WOL Server configuration -> [*]LED On-State Inversion```
 
 ## Configuration
 ### SSL Certification
